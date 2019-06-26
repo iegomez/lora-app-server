@@ -46,24 +46,25 @@ func (i *Integration) SendDataUp(pl integration.DataUpPayload) error {
 		return nil
 	}
 
-	data := structToMap("data", pl.Object)
+	attributes := make(map[string]interface{})
 	for k, v := range pl.Tags {
-		data[k] = v
+		attributes[k] = v
 	}
-	data["application_name"] = pl.ApplicationName
-	data["application_id"] = strconv.FormatInt(pl.ApplicationID, 10)
-	data["device_name"] = pl.DeviceName
-	data["dev_eui"] = pl.DevEUI
-	data["f_port"] = pl.FPort
+	attributes["application_name"] = pl.ApplicationName
+	attributes["application_id"] = strconv.FormatInt(pl.ApplicationID, 10)
+	attributes["device_name"] = pl.DeviceName
+	attributes["dev_eui"] = pl.DevEUI
 
-	if err := i.send(accessToken, data); err != nil {
+	telemetry := structToMap("data", pl.Object)
+
+	if err := i.send(accessToken, attributes, telemetry); err != nil {
 		return errors.Wrap(err, "send event error")
 	}
 
 	log.WithFields(log.Fields{
 		"event":   "up",
 		"dev_eui": pl.DevEUI,
-	}).Info("integration/thingsboard: telemetry uploaded")
+	}).Info("integration/thingsboard: attributes and telemetry uploaded")
 
 	return nil
 }
@@ -91,29 +92,30 @@ func (i *Integration) SendStatusNotification(pl integration.StatusNotification) 
 		return nil
 	}
 
-	data := map[string]interface{}{
-		"application_name":                 pl.ApplicationName,
-		"application_id":                   strconv.FormatInt(pl.ApplicationID, 10),
-		"device_name":                      pl.DeviceName,
-		"dev_eui":                          pl.DevEUI,
+	attributes := make(map[string]interface{})
+	for k, v := range pl.Tags {
+		attributes[k] = v
+	}
+	attributes["application_name"] = pl.ApplicationName
+	attributes["application_id"] = strconv.FormatInt(pl.ApplicationID, 10)
+	attributes["device_name"] = pl.DeviceName
+	attributes["dev_eui"] = pl.DevEUI
+
+	telemetry := map[string]interface{}{
 		"status_battery":                   pl.Battery,
 		"status_margin":                    pl.Margin,
 		"status_external_power_source":     pl.ExternalPowerSource,
 		"status_battery_level":             pl.BatteryLevel,
 		"status_battery_level_unavailable": pl.BatteryLevelUnavailable,
 	}
-	for k, v := range pl.Tags {
-		data[k] = v
-	}
-
-	if err := i.send(accessToken, data); err != nil {
+	if err := i.send(accessToken, attributes, telemetry); err != nil {
 		return errors.Wrap(err, "send event error")
 	}
 
 	log.WithFields(log.Fields{
 		"event":   "status",
 		"dev_eui": pl.DevEUI,
-	}).Info("integration/thingsboard: telemetry uploaded")
+	}).Info("integration/thingsboard: attributes and telemetry uploaded")
 
 	return nil
 }
@@ -126,27 +128,29 @@ func (i *Integration) SendLocationNotification(pl integration.LocationNotificati
 		return nil
 	}
 
-	data := map[string]interface{}{
-		"application_name":   pl.ApplicationName,
-		"application_id":     strconv.FormatInt(pl.ApplicationID, 10),
-		"device_name":        pl.DeviceName,
-		"dev_eui":            pl.DevEUI,
+	attributes := make(map[string]interface{})
+	for k, v := range pl.Tags {
+		attributes[k] = v
+	}
+	attributes["application_name"] = pl.ApplicationName
+	attributes["application_id"] = strconv.FormatInt(pl.ApplicationID, 10)
+	attributes["device_name"] = pl.DeviceName
+	attributes["dev_eui"] = pl.DevEUI
+
+	telemetry := map[string]interface{}{
 		"location_latitude":  pl.Location.Latitude,
 		"location_longitude": pl.Location.Longitude,
 		"location_altitude":  pl.Location.Altitude,
 	}
-	for k, v := range pl.Tags {
-		data[k] = v
-	}
 
-	if err := i.send(accessToken, data); err != nil {
+	if err := i.send(accessToken, attributes, telemetry); err != nil {
 		return errors.Wrap(err, "send event error")
 	}
 
 	log.WithFields(log.Fields{
 		"event":   "location",
 		"dev_eui": pl.DevEUI,
-	}).Info("integration/thingsboard: telemetry uploaded")
+	}).Info("integration/thingsboard: attributes and telemetry uploaded")
 
 	return nil
 }
@@ -161,29 +165,45 @@ func (i *Integration) Close() error {
 	return nil
 }
 
-func (i *Integration) send(token string, data map[string]interface{}) error {
-	b, err := json.Marshal(data)
-	if err != nil {
-		return errors.Wrap(err, "marshal json error")
+func (i *Integration) send(token string, attributes, telemetry map[string]interface{}) error {
+	calls := []struct {
+		payload  map[string]interface{}
+		endpoint string
+	}{
+		{
+			payload:  attributes,
+			endpoint: "%s/api/v1/%s/attributes",
+		},
+		{
+			payload:  telemetry,
+			endpoint: "%s/api/v1/%s/telemetry",
+		},
 	}
 
-	url := fmt.Sprintf("%s/api/v1/%s/telemetry", i.server, token)
-	req, err := http.NewRequest("POST", url, bytes.NewReader(b))
-	if err != nil {
-		return errors.Wrap(err, "new request error")
-	}
+	for _, call := range calls {
+		b, err := json.Marshal(call.payload)
+		if err != nil {
+			return errors.Wrap(err, "marshal json error")
+		}
 
-	req.Header.Set("Content-Type", "application/json")
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return errors.Wrap(err, "http request error")
-	}
-	defer resp.Body.Close()
+		url := fmt.Sprintf(call.endpoint, i.server, token)
+		req, err := http.NewRequest("POST", url, bytes.NewReader(b))
+		if err != nil {
+			return errors.Wrap(err, "new request error")
+		}
 
-	// check that response is in 200 range
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		b, _ := ioutil.ReadAll(resp.Body)
-		return fmt.Errorf("expected 2xx response, got: %d (%s)", resp.StatusCode, string(b))
+		req.Header.Set("Content-Type", "application/json")
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			return errors.Wrap(err, "http request error")
+		}
+		defer resp.Body.Close()
+
+		// check that response is in 200 range
+		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+			b, _ := ioutil.ReadAll(resp.Body)
+			return fmt.Errorf("expected 2xx response, got: %d (%s)", resp.StatusCode, string(b))
+		}
 	}
 
 	return nil
