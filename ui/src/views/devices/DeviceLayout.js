@@ -24,6 +24,7 @@ import DeviceData from "./DeviceData";
 import DeviceFrames from "./DeviceFrames";
 import ListFUOTADeploymentsForDevice from "../../views/fuota/ListFUOTADeploymentsForDevice";
 import DeviceDetails from "./DeviceDetails";
+import DeviceQueue from './DeviceQueue';
 
 import theme from "../../theme";
 
@@ -124,6 +125,8 @@ class DeviceLayout extends Component {
       tab = 5;
     } else if (window.location.href.endsWith("/fuota-deployments")) {
       tab = 6;
+    } else if (window.location.href.endsWith("/queue")) {
+      tab = 7;
     }
 
     if (tab > 1 && !this.state.admin) {
@@ -187,6 +190,7 @@ class DeviceLayout extends Component {
             <Tab label="Device data" component={Link} to={`/organizations/${this.props.match.params.organizationID}/applications/${this.props.match.params.applicationID}/devices/${this.props.match.params.devEUI}/data`} />
             <Tab label="LoRaWAN Frames" component={Link} to={`/organizations/${this.props.match.params.organizationID}/applications/${this.props.match.params.applicationID}/devices/${this.props.match.params.devEUI}/frames`} />
             <Tab label="Firmware" component={Link} to={`/organizations/${this.props.match.params.organizationID}/applications/${this.props.match.params.applicationID}/devices/${this.props.match.params.devEUI}/fuota-deployments`} />
+            <Tab label="Queue" component={Link} to={`/organizations/${this.props.match.params.organizationID}/applications/${this.props.match.params.applicationID}/devices/${this.props.match.params.devEUI}/queue`} />
           </Tabs>
         </Grid>
 
@@ -199,6 +203,7 @@ class DeviceLayout extends Component {
             <Route exact path={`${this.props.match.path}/data`} render={props => <DeviceData device={this.state.device.device} admin={this.state.admin} {...props} />} />
             <Route exact path={`${this.props.match.path}/frames`} render={props => <DeviceFrames device={this.state.device.device} admin={this.state.admin} {...props} />} />
             <Route exact path={`${this.props.match.path}/fuota-deployments`} render={props => <ListFUOTADeploymentsForDevice device={this.state.device.device} admin={this.state.admin} {...props} /> } />
+            <Route exact path={`${this.props.match.path}/queue`} render={props => <DeviceQueue device={this.state.device.device} admin={this.state.admin} {...props} />} />
           </Switch>
         </Grid>
       </Grid>
