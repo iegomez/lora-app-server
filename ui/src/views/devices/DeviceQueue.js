@@ -4,8 +4,6 @@ import { withStyles } from "@material-ui/core/styles";
 
 import JSONTree from "../../components/JSONTree";
 
-import swal from 'sweetalert2'
-
 import Grid from "@material-ui/core/Grid";
 import TableCell from "@material-ui/core/TableCell";
 import TableRow from "@material-ui/core/TableRow";
@@ -37,6 +35,12 @@ function getModalStyle() {
   };
 }
 
+function hexToBase64(str) {
+	return btoa(String.fromCharCode.apply(null,
+		str.replace(/\r|\n/g, "").replace(/([\da-fA-F]{2}) ?/g, "0x$1 ").replace(/ +$/, "").split(" "))
+	);
+}
+
 const styles = theme => ({
   paper: {
     position: 'absolute',
@@ -60,7 +64,6 @@ class QueueMessage extends Component {
   render() {
 
 		const message = this.props.message;
-		
 		const confirmed = message.confirmed ? "True" : "False";
 		const jsonData = message.jsonObject === "" ? "" : <JSONTree data={message.jsonObject} />;
 
@@ -85,12 +88,14 @@ class DeviceQueue extends Component {
 			deviceQueueItem: {jsonObject: ""},
 			modalOpen: false,
 			sending: false,
+			base64: true,
 		};
 		this.flushQueue = this.flushQueue.bind(this);
 		this.enqueueMessage = this.enqueueMessage.bind(this);
 		this.openModal = this.openModal.bind(this);
 		this.closeModal = this.closeModal.bind(this);
 		this.onChange = this.onChange.bind(this);
+		this.onChangeCoding = this.onChangeCoding.bind(this);
   }
 
 
@@ -110,28 +115,13 @@ class DeviceQueue extends Component {
 	
 	flushQueue() {
 
-		swal({
-			title: 'Are you sure?',
-			text: "You won't be able to revert this!",
-			type: 'warning',
-			showCancelButton: true,
-			confirmButtonColor: '#3085d6',
-			cancelButtonColor: '#d33',
-			confirmButtonText: 'Confirm'
-		}).then((result) => {
-			if (result.value) {
-				DeviceQueueStore.flush(this.props.match.params.devEUI, (response) => {
-					this.componentDidMount();
-					swal(
-						'Flushed!',
-						'The queue has been completely flushed.',
-						'success'
-					);
-				});
-			}
-		})
-
-		
+		let conf = window.confirm("Are you sure you want to flush the queue?");
+		if (conf) {
+			DeviceQueueStore.flush(this.props.match.params.devEUI, (response) => {
+				this.componentDidMount();
+				alert("The queue has been flushed!");
+			});
+		}
 	}
 
 	openModal() {
@@ -151,19 +141,18 @@ class DeviceQueue extends Component {
 	}
 
 	enqueueMessage(e) {
+		e.preventDefault();
 		this.setState({
 			sending: true,
 		});
-		e.preventDefault();
 		let deviceQueueItem = this.state.deviceQueueItem;
+		if(!this.state.base64) {
+			deviceQueueItem.data = hexToBase64(deviceQueueItem.data);
+		}
 		DeviceQueueStore.enqueue(this.props.match.params.devEUI, deviceQueueItem, (response) => {
 			
 			if(response && response.fCnt > 0) {
-				swal(
-					'Success!',
-					'The message hass been added to the queue.',
-					'success'
-				);
+				alert("The message has been added to the queue!");
 			}
 			this.componentDidMount();
 			this.closeModal();
@@ -193,6 +182,12 @@ class DeviceQueue extends Component {
 		});
 	}
 
+	onChangeCoding(e) {
+		this.setState({
+			base64: e.target.checked
+		});
+	}
+
   render() {
 		const QueueMessages = this.state.deviceQueueItems.map((deviceQueueItem, i) => <QueueMessage key={i} index={i} message={deviceQueueItem} />);
 
@@ -219,7 +214,6 @@ class DeviceQueue extends Component {
 										<TableCell>Confirmed</TableCell>
 										<TableCell>FPort</TableCell>
 										<TableCell>Data</TableCell>
-										<TableCell>JSON Object</TableCell>
 									</TableRow>
 								</TableHead>
 								<TableBody>
@@ -271,14 +265,22 @@ class DeviceQueue extends Component {
 								value={this.state.deviceQueueItem.data || ""}
 								onChange={this.onChange}
 							/>
-							<TextField
-								id="jsonObject"
-								label="JsonObject"
-								fullWidth={true}
-								margin="normal"
-								value={this.state.deviceQueueItem.jsonObject || ""}
-								onChange={this.onChange}
-							/>
+							<FormControl fullWidth margin="normal">
+								<FormControlLabel
+									label="Base64"
+									control={
+										<Checkbox
+											id="base64"
+											checked={!!this.state.base64}
+											onChange={this.onChangeCoding}
+											color="primary"
+										/>
+									}
+								/>
+								<FormHelperText>
+									Is the data base 64 encoded (checked) or hex encoded (unchecked).
+								</FormHelperText>
+							</FormControl>
 							<Grid container justify="flex-end" className={this.props.classes.formControl}>
 								<Button color="primary" onClick={this.closeModal}>Cancel</Button>
 								<Button color="primary" type="submit" disabled={this.state.sending}>

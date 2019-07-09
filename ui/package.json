@@ -25,7 +25,6 @@
     "robust-websocket": "^0.3.0",
     "source-map-explorer": "^1.6.0",
     "swagger-client": "^3.8.23",
-    "sweetalert2": "^8.13.0",
     "typeface-roboto": "0.0.54",
     "whatwg-fetch": "^3.0.0"
   },
